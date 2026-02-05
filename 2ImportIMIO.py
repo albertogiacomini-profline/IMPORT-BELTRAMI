@@ -23,7 +23,7 @@ dfI_fine_utilizzo = dfI[has_fine_utilizzo].copy()
 # Aggiungi una nuova colonna chiamata 'SKU' al DataFrame dfC
 dfC['SKU'] = pd.NA
 
-
+'''
 # BRAND CON CODICE PRODUTTORE VALIDO
 
 # import iniziali
@@ -46,7 +46,7 @@ for brand in unique_brands:
 
 
 # BRAND CON CODICE PRODUTTORE SCHIFO
-'''
+
 
 
 # import iniziali
