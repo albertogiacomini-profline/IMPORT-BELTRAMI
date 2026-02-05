@@ -35,6 +35,12 @@ dfI["Fine-utilizzo"] = normalize_text_col(dfI["Fine-utilizzo"])
 dfI_active = dfI[dfI["Fine-utilizzo"].isna()].copy()
 dfI_inactive = dfI[dfI["Fine-utilizzo"].notna()].copy()
 
+# Escludo codici di sistema (es. "z") che non rappresentano articoli reali
+if "Codice" in dfI_active.columns:
+    dfI_active = dfI_active[~dfI_active["Codice"].astype("string").str.lower().eq("z")]
+if "Codice" in dfI_inactive.columns:
+    dfI_inactive = dfI_inactive[~dfI_inactive["Codice"].astype("string").str.lower().eq("z")]
+
 # Mantengo una sola riga per codice produttore (prima occorrenza)
 dfI_active = dfI_active.drop_duplicates(subset="Codice-produttore", keep="first", ignore_index=True)
 dfI_inactive = dfI_inactive.drop_duplicates(subset="Codice-produttore", keep="first", ignore_index=True)
