@@ -1,144 +1,164 @@
 import pandas as pd
+
 # import foglio uno
 imio_f = "input/Esportazione_Articoli - Vista Grid.xlsx"
 cp_f = "file/file_intermedi/clean.xlsx"
-iniziali = "input/iniziali.xlsx"
-Schifo = "input/SCHIFO.xlsx"
-output_file = 'output/MARCA NON RICONOSCIUTA.xlsx'
+
+
+def normalize_text_col(series: pd.Series) -> pd.Series:
+    """Converte in stringa pulita mantenendo i NaN."""
+    return (
+        series.astype("string")
+        .str.strip()
+        .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+    )
+
+
+# Carico i file
 dfI = pd.read_excel(imio_f)
 dfC = pd.read_excel(cp_f)
 
-# sostituisco a capo nei titoli
+# Uniformo i nomi colonna del file esportazione articoli
 dfI.columns = [c.replace("\n", "_") for c in dfI.columns]
 dfI.columns = [c.replace(" ", "-") for c in dfI.columns]
-# cancella colonne vuote file imio
-dfI.dropna(axis="columns", how='all', inplace=True)
 
-# Aggiungi una nuova colonna chiamata 'SKU' al DataFrame dfC
-dfC['SKU'] = pd.NA
+# Elimino colonne completamente vuote
+dfI.dropna(axis="columns", how="all", inplace=True)
 
+# Normalizzo il codice produttore in entrambi i dataset
+dfC["CODICE PRODUTTORE"] = normalize_text_col(dfC["CODICE PRODUTTORE"])
+dfI["Codice-produttore"] = normalize_text_col(dfI["Codice-produttore"])
 
-# BRAND CON CODICE PRODUTTORE VALIDO
+# Separo export articoli in ATTIVI vs DISATTIVATI
+# Attivo = Fine-utilizzo vuota
+# Inattivo = Fine-utilizzo valorizzata O Codice-produttore vuoto
+dfI["Fine-utilizzo"] = normalize_text_col(dfI["Fine-utilizzo"])
+inactive_mask = dfI["Fine-utilizzo"].notna() | dfI["Codice-produttore"].isna()
+dfI_active = dfI[~inactive_mask].copy()
+dfI_inactive = dfI[inactive_mask].copy()
 
-# import iniziali
-dfin = pd.read_excel(iniziali)
-# Ottieni i valori unici della colonna 'BRAND'
-unique_brands = dfin['BRAND'].unique()
+# Escludo codici di sistema (es. "z") che non rappresentano articoli reali
+if "Codice" in dfI_active.columns:
+    dfI_active = dfI_active[~dfI_active["Codice"].astype("string").str.lower().eq("z")]
+if "Codice" in dfI_inactive.columns:
+    dfI_inactive = dfI_inactive[~dfI_inactive["Codice"].astype("string").str.lower().eq("z")]
 
-for brand in unique_brands:
-    # Condizione per filtrare le righe con il brand corrente e CODICE PRODUTTORE vuoto o NaN
-    condition = (dfC['BRAND'] == brand) & (dfC['CODICE PRODUTTORE'].isna() | dfC['CODICE PRODUTTORE'].eq(''))
+# Mantengo una sola riga per codice produttore (prima occorrenza)
+dfI_active = dfI_active.drop_duplicates(subset="Codice-produttore", keep="first", ignore_index=True)
+dfI_inactive = dfI_inactive.drop_duplicates(subset="Codice-produttore", keep="first", ignore_index=True)
 
-    # Droppa le righe che soddisfano la condizione
-    dfC = dfC.drop(dfC[condition].index)
+# Rinomino colonne clean per allineare merge e output
+dfC = dfC.rename(
+    columns={
+        "CODICE PRODUTTORE": "Codice-produttore",
+        "EAN": "Codice-a-barre",
+        "DESCRIZIONE": "Descrizione",
+        "PREZZO GRANDI CLIENTI (IVA ESCL.)": "PREZZO-ACQUISTO",
+        "PREZZO NEGOZIO (IVA ESCL.)": "PREZZO-VENDITA",
+        "MSRP": "PUBBLICO",
+    }
+)
 
-    # Ottieni il valore di 'INIT' per il brand corrente dal DataFrame dfin
-    init_value = dfin.loc[dfin['BRAND'] == brand, 'INIT'].astype(str).values[0]
+# Merge principale: match SOLO su articoli attivi usando Codice-produttore
+dfM = dfC.merge(dfI_active, how="left", on="Codice-produttore", suffixes=("", "-I"))
 
-    # Popola la colonna 'SKU' per le righe con il brand corrente
-    dfC.loc[dfC['BRAND'] == brand, 'SKU'] = init_value + dfC['CODICE PRODUTTORE'].astype(str)
-
-
-# BRAND CON CODICE PRODUTTORE SCHIFO
-'''
-
-
-# import iniziali
-dfins = pd.read_excel(Schifo)
-# Ottieni i valori unici della colonna 'BRAND'
-unique_brands = dfins['BRAND'].unique()
-
-for brand in unique_brands:
-    # Condizione per filtrare le righe con il brand corrente e CODICE PRODUTTORE vuoto o NaN
-    condition = (dfC['BRAND'] == brand) & (dfC['B-CODICE'].isna() | dfC['B-CODICE'].eq(''))
-
-    # Droppa le righe che soddisfano la condizione
-    dfC = dfC.drop(dfC[condition].index)
-
-    # Ottieni il valore di 'INIT' per il brand corrente dal DataFrame dfin
-    init_value2 = dfins.loc[dfins['BRAND'] == brand, 'INIT'].astype(str).values[0]
-
-    # Popola la colonna 'SKU' per le righe con il brand corrente
-    dfC.loc[dfC['BRAND'] == brand, 'SKU'] = init_value2 + dfC['B-CODICE'].astype(str)
-
-#BRAND NON RICONOSCIUTI
-
-
-# Seleziona le righe di dfC dove la colonna SKU è vuota
-sku_empty_dfC = dfC[dfC['SKU'].isnull() | dfC['SKU'].eq('')]
-
-# Scrivi il DataFrame filtrato in un file Excel
-if not sku_empty_dfC.empty:
-    sku_empty_dfC.to_excel(output_file, index=False)
-'''
-
-
-
-# Rinominare le colonne
-dfC.rename(columns={'SKU': 'Codice','B-CODICE': 'B-CODICE','CODICE PRODUTTORE': 'Codice-produttore',
-                   'EAN': 'Codice-a-barre','DESCRIZIONE': 'Descrizione',
-                   'PREZZO GRANDI CLIENTI (IVA ESCL.)': 'PREZZO ACQUISTO',
-                   'PREZZO NEGOZIO (IVA ESCL.)': 'PREZZO VENDITA','MSRP': 'PUBBLICO'}, inplace=True)
-
-# merge
-dfM = dfC.merge(dfI, how='left', on='Codice', suffixes=('', '-I'))
+# Pulizia nomi colonna eventuali
 dfM.columns = [c.replace("\n", "_") for c in dfM.columns]
 dfM.columns = [c.replace(" ", "-") for c in dfM.columns]
 
-# Elimina le colonne in col_drop da dfM
-col_drop = ['Obsoleto',	'MRP',	'Vecchio-codice',	'Rit_EscludiCalcolo', 'StampaForfait_Flg',
-          'Lst-scaglioni-VEN',	'Lst-scaglioni-ACQ', 'Peso-netto', 'Colli', 'Lunghezza','Larghezza', 'Altezza',
-          'PezziConfezione', 'PrevSpe_CalcoloTp', 'ExportTp', 'OmaggioTp', 'Gest.-distinta-fantasma', 'GG_Scadenza',
-          'Attivita_Flg', 'Rapp_FatturazioneTp', 'IdStato_OrigineMerce', 'ValoreUnit_Siae', 'Data-ultima-modifica',
-          'Fine-utilizzo', 'Descrizione-breve']
-dfM = dfM.drop(columns=col_drop)
+# Elimina colonne non utili se presenti
+col_drop = [
+    "Obsoleto",
+    "MRP",
+    "Vecchio-codice",
+    "Rit_EscludiCalcolo",
+    "StampaForfait_Flg",
+    "Lst-scaglioni-VEN",
+    "Lst-scaglioni-ACQ",
+    "Peso-netto",
+    "Colli",
+    "Lunghezza",
+    "Larghezza",
+    "Altezza",
+    "PezziConfezione",
+    "PrevSpe_CalcoloTp",
+    "ExportTp",
+    "OmaggioTp",
+    "Gest.-distinta-fantasma",
+    "GG_Scadenza",
+    "Attivita_Flg",
+    "Rapp_FatturazioneTp",
+    "IdStato_OrigineMerce",
+    "ValoreUnit_Siae",
+    "Data-ultima-modifica",
+    "Fine-utilizzo",
+    "Descrizione-breve",
+]
+col_drop_present = [c for c in col_drop if c in dfM.columns]
+dfM = dfM.drop(columns=col_drop_present)
 
-# genero dataframe not found
-dfMN = dfM[~dfM['Codice'].notna()]
-# Elimina le righe con SKU vuoto da dfC
-dfC = dfC[dfC['Codice'].notna()]
+# --- TO_ADD ---
+# Codici senza match sugli ATTIVI
+# (Codice viene dall'export articoli: se è NaN significa non trovato negli attivi)
+df_to_add = dfM[dfM["Codice"].isna()].copy()
 
-# rende maiscole le descrizioni
-dfM['Descrizione'] = dfM['Descrizione'].str.upper()
-dfM['UM'] = dfM['UM'].str.upper()
-dfM['Codice-merceologico'] = dfM['Codice-merceologico'].str.upper()
+# Verifico se il codice produttore è presente nei DISATTIVATI
+inactive_info = dfI_inactive[["Codice-produttore", "Codice"]].rename(
+    columns={"Codice": "Codice-disattivato-associato"}
+)
 
-# rendo NF Nan
-dfM.loc[dfM['Famiglia'] == 'NF', 'Famiglia'] = pd.NA
-dfM.loc[dfM['Famiglia'] == '', 'Famiglia'] = pd.NA
+df_to_add = df_to_add.merge(inactive_info, how="left", on="Codice-produttore")
+df_to_add["Associato-a-codice-disattivato"] = df_to_add[
+    "Codice-disattivato-associato"
+].notna()
 
-# genero dataframe famiglia mancante
-dfFN = dfM[dfM['Famiglia'].isna()]
-dfFN = dfFN.dropna(subset=["Codice"], inplace=False)
-
-# drop not found
+# --- OUTPUT PRINCIPALE ---
+# Mantengo solo i codici matchati sugli attivi
 dfM = dfM.dropna(subset=["Codice"], inplace=False)
 
+# Rende maiuscole alcune colonne se presenti
+for col in ["Descrizione", "UM", "Codice-merceologico"]:
+    if col in dfM.columns:
+        dfM[col] = dfM[col].astype("string").str.upper()
+
+# Normalizzo famiglia
+if "Famiglia" in dfM.columns:
+    dfM.loc[dfM["Famiglia"] == "NF", "Famiglia"] = pd.NA
+    dfM.loc[dfM["Famiglia"] == "", "Famiglia"] = pd.NA
+
+# Genero dataframe famiglia mancante
+dfFN = pd.DataFrame()
+if "Famiglia" in dfM.columns:
+    dfFN = dfM[dfM["Famiglia"].isna()].copy()
+    dfFN = dfFN.dropna(subset=["Codice"], inplace=False)
+
 # output
-dfM.drop_duplicates(subset='Codice', keep='first', inplace=True, ignore_index=True)
+dfM.drop_duplicates(subset="Codice", keep="first", inplace=True, ignore_index=True)
 dfM.to_excel("file/file_intermedi/merged_imio.xlsx", index=False)
 
-if not dfMN.empty:
-    dfMN.drop_duplicates(subset='Codice-produttore', keep='first', inplace=True, ignore_index=True)
-    dfMN.to_excel("file/file_intermedi/To_add.xlsx", index=False)
+if not df_to_add.empty:
+    df_to_add.drop_duplicates(subset="Codice-produttore", keep="first", inplace=True, ignore_index=True)
+    df_to_add.to_excel("file/file_intermedi/To_add.xlsx", index=False)
+
 if not dfFN.empty:
-    dfFN.drop_duplicates(subset='Codice', keep='first', inplace=True, ignore_index=True)
+    dfFN.drop_duplicates(subset="Codice", keep="first", inplace=True, ignore_index=True)
     dfFN.to_excel("file/file_intermedi/To_no_famiglia.xlsx", index=False)
 
 # Estrai i valori unici dalla colonna "FAMIGLIA"
-famiglia_unique = dfM['Famiglia'].drop_duplicates()
-# Rimuovi i valori NaN da famiglia_unique
-famiglia_unique = famiglia_unique.dropna()
+famiglia_unique = pd.Series(dtype="string")
+if "Famiglia" in dfM.columns:
+    famiglia_unique = dfM["Famiglia"].drop_duplicates().dropna()
 
-#leggi file sconti
+# leggi file sconti
 dfS = pd.read_excel("input/sconti.xlsx")
 
 # Verifica quali valori non sono presenti in famiglia_unique
-valori_da_aggiungere = famiglia_unique[~famiglia_unique.isin(dfS['FAMIGLIA'])]
+valori_da_aggiungere = famiglia_unique[~famiglia_unique.isin(dfS["FAMIGLIA"])]
 print(valori_da_aggiungere)
+
 # Aggiungi i valori mancanti a dfS
 if not valori_da_aggiungere.empty:
-    nuove_righe = pd.DataFrame({'FAMIGLIA': valori_da_aggiungere})
+    nuove_righe = pd.DataFrame({"FAMIGLIA": valori_da_aggiungere})
     dfS = pd.concat([dfS, nuove_righe], ignore_index=True)
     print(dfS)
     dfS.to_excel("input/sconti.xlsx", index=False)
