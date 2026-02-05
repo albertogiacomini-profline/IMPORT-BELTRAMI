@@ -31,9 +31,11 @@ dfI["Codice-produttore"] = normalize_text_col(dfI["Codice-produttore"])
 
 # Separo export articoli in ATTIVI vs DISATTIVATI
 # Attivo = Fine-utilizzo vuota
+# Inattivo = Fine-utilizzo valorizzata O Codice-produttore vuoto
 dfI["Fine-utilizzo"] = normalize_text_col(dfI["Fine-utilizzo"])
-dfI_active = dfI[dfI["Fine-utilizzo"].isna()].copy()
-dfI_inactive = dfI[dfI["Fine-utilizzo"].notna()].copy()
+inactive_mask = dfI["Fine-utilizzo"].notna() | dfI["Codice-produttore"].isna()
+dfI_active = dfI[~inactive_mask].copy()
+dfI_inactive = dfI[inactive_mask].copy()
 
 # Escludo codici di sistema (es. "z") che non rappresentano articoli reali
 if "Codice" in dfI_active.columns:
