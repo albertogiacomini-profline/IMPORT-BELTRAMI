@@ -30,6 +30,7 @@ df.drop(df[df['BRAND'].isin(ban)].index, axis=0, inplace=True)
 # rimuovi spazi da codici
 df['B-CODICE'] = df['B-CODICE'].str.replace(' ', '', regex=True)
 df['CODICE PRODUTTORE'] = df['CODICE PRODUTTORE'].str.replace(' ', '', regex=True)
+df['CODICE PRODUTTORE'] = df['CODICE PRODUTTORE'].str.replace('*', '', regex=False)
 #RIMUOVI CARATTERI STRANI DA DESCIZIONE
 df['DESCRIZIONE'] = df['DESCRIZIONE'].str.replace('*', '', regex=False)
 df['DESCRIZIONE'] = df['DESCRIZIONE'].str.replace('™', '', regex=False)
