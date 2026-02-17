@@ -80,4 +80,20 @@ for col in ['peso', 'volume']:
         numeric_values = pd.to_numeric(dft2_new[col], errors='coerce')
         dft2_new.loc[numeric_values == 0, col] = None
 
+# Nel file finale non devono esserci duplicati sulla chiave sku:
+# manteniamo la riga con più informazioni valorizzate.
+dft2_new['_info_count'] = dft2_new.apply(
+    lambda row: sum(
+        pd.notna(value) and str(value).strip() != ''
+        for value in row
+    ),
+    axis=1
+)
+dft2_new = (
+    dft2_new
+    .sort_values('_info_count', ascending=False)
+    .drop_duplicates(subset=['sku'], keep='first')
+    .drop(columns=['_info_count'])
+)
+
 dft2_new.to_excel(r"output/beltrami-"+d1+".xlsx", index=False, sheet_name='Articoli_listino_vendita')
