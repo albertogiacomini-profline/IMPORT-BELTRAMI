@@ -29,13 +29,13 @@ dfP.to_excel(r"output/DFP.xlsx", index=False, sheet_name='Articoli_listino_vendi
 
 # Nuovo set di colonne richiesto
 new_columns = [
-    'skupadre', 'ean', 'SKU', 'urlkey', 'categoria', 'descrizione breve',
+    'skupadre', 'ean', 'sku', 'urlkey', 'categoria', 'descrizione breve',
     'metatitle', 'metadescription', 'status', 'locale', 'componente', 'brand',
     'specialita', 'velocita', 'grupposerie', 'movimento', 'materiale', 'tecnologia forcella',
     'specifica tecnica', 'specifica tecnica 2', 'tipologia freno', 'larghezza mozzo',
     'ingranaggi', 'colore', 'confezione', 'attacco', 'escursione', 'software',
     'tipologia bloccaggio', 'diametro', 'diametro coperture', 'larghezza', 'lunghezza',
-    'moltiplica', 'altezza', 'peso', 'volume', 'famiglia', 'merceologico', 'UM',
+    'moltiplica', 'altezza', 'peso', 'volume', 'famiglia', 'merceologico', 'um',
     'codice_produttore', 'codice_barre_produttore', 'descrizione', 'gemini_export',
     'stato_origine', 'LVP', 'AMA', 'AMB', 'AMC', 'OEMA', 'OEMB', 'OEMC'
 ]
@@ -45,10 +45,10 @@ dft2_new = pd.DataFrame(columns=new_columns)
 
 # Mappatura delle colonne esistenti alle nuove colonne se applicabile
 column_mapping = {
-    'CODICE INTERNO': 'SKU',
+    'CODICE INTERNO': 'sku',
     'Codice-a-barre': 'ean',
     'DESCRIZIONE INTERNA': 'descrizione',
-    'UM': 'UM',
+    'UM': 'um',
     'MERCEOLOGICO': 'merceologico',
     'FAMIGLIA': 'famiglia',
     'CODICE PRODUTTORE': 'codice_produttore',
@@ -73,5 +73,11 @@ for old_col, new_col in column_mapping.items():
 for col in new_columns:
     if col not in dft2_new.columns:
         dft2_new[col] = None  # o qualsiasi valore predefinito desiderato
+
+# Le celle con valore 0 per peso e volume devono risultare vuote nel file finale
+for col in ['peso', 'volume']:
+    if col in dft2_new.columns:
+        numeric_values = pd.to_numeric(dft2_new[col], errors='coerce')
+        dft2_new.loc[numeric_values == 0, col] = None
 
 dft2_new.to_excel(r"output/beltrami-"+d1+".xlsx", index=False, sheet_name='Articoli_listino_vendita')
