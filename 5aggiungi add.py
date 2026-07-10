@@ -1,11 +1,20 @@
+import os
 import pandas as pd
 
 
-df = pd.read_excel('output/ord-To_add.xlsx', sheet_name=0)
-dfF = pd.read_excel('output/ord-To_no_famiglia.xlsx', sheet_name=0)
+COLONNE_DA_RIMUOVERE = ['CONTROPARTITA CONTABILE', 'TIPOLOGIA RAEE', 'PREZZO PRODUTTORE', 'PREZZO', 'SCONTI', 'PUBBLICO', 'PREZZO-VENDITA', 'PREZZO-ACQUISTO', 'BARCODE PRODUTTORE']
 
-df = df.drop(columns=['CONTROPARTITA CONTABILE', 'TIPOLOGIA RAEE', 'PREZZO PRODUTTORE', 'PREZZO', 'SCONTI', 'PUBBLICO', 'PREZZO-VENDITA','PREZZO-ACQUISTO', 'BARCODE PRODUTTORE'])
-dfF = dfF.drop(columns=[ 'CONTROPARTITA CONTABILE', 'TIPOLOGIA RAEE', 'PREZZO PRODUTTORE', 'PREZZO', 'SCONTI', 'PUBBLICO', 'PREZZO-VENDITA','PREZZO-ACQUISTO', 'BARCODE PRODUTTORE'])
+df = pd.read_excel('output/ord-To_add.xlsx', sheet_name=0)
+df = df.drop(columns=COLONNE_DA_RIMUOVERE)
+
+file_no_famiglia = 'output/ord-To_no_famiglia.xlsx'
+if os.path.exists(file_no_famiglia):
+    dfF = pd.read_excel(file_no_famiglia, sheet_name=0)
+    dfF = dfF.drop(columns=COLONNE_DA_RIMUOVERE)
+else:
+    print(f"File {file_no_famiglia} non presente: nessun articolo senza famiglia da aggiornare.")
+    dfF = pd.DataFrame(columns=df.columns)
+
 df2 = pd.read_excel('input/Esportazione_Articoli - Vista Grid.xlsx',
                     )
 

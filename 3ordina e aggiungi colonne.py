@@ -4,7 +4,7 @@ import os
 import shutil
 # import foglio uno
 
-file = ["file/file_intermedi/merged_imio.xlsx", "file/file_intermedi/To_add.xlsx", "file/file_intermedi/To_no_famiglia.xlsx"]
+file = ["file/file_intermedi/merged_imio.xlsx", "file/file_intermedi/To_add.xlsx", "file/file_intermedi/To_no_famiglia.xlsx", "file/file_intermedi/To_ambigui.xlsx"]
 for F in file:
     if os.path.exists(F):
         df = pd.read_excel(F)
