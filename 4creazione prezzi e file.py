@@ -1,17 +1,37 @@
+import os
 import pandas as pd
 import numpy as np
+from colorama import Fore, init
 # aquisizione data
 from datetime import date
+
+init(autoreset=True)
 
 today = date.today()
 d1 = today.strftime("%d-%m-%Y")
 
 # definizione lista listini
 listini = ["amc", 'amb', 'ama', 'oemc', 'oemb', 'oema']
+
+ord_f = "output/ord-merged_imio.xlsx"
+sconti_f = "input/sconti.xlsx"
+if not os.path.exists(ord_f):
+    raise FileNotFoundError(f"Non trovo '{ord_f}': lancia prima '3ordina e aggiungi colonne.py'.")
+if not os.path.exists(sconti_f):
+    raise FileNotFoundError(f"Non trovo '{sconti_f}' (tabella sconti per famiglia).")
+
 # lettura file
-dfO = pd.read_excel("output/ord-merged_imio.xlsx")
-dfS = pd.read_excel("input/sconti.xlsx")
+dfO = pd.read_excel(ord_f)
+dfS = pd.read_excel(sconti_f)
 iva = 1.22
+
+colonne_richieste = ['FAMIGLIA', 'PREZZO-VENDITA', 'PUBBLICO']
+colonne_mancanti = [c for c in colonne_richieste if c not in dfO.columns]
+if colonne_mancanti:
+    raise ValueError(f"In '{ord_f}' mancano le colonne {colonne_mancanti}: controlla lo step precedente.")
+if 'FAMIGLIA' not in dfS.columns:
+    raise ValueError(f"In '{sconti_f}' manca la colonna 'FAMIGLIA'.")
+
 # Elimina le righe con valori vuoti o NaN nella colonna 'famiglia'
 dfO = dfO.dropna(subset=['FAMIGLIA'])
 dfO = dfO[dfO['FAMIGLIA'] != '']
@@ -22,6 +42,15 @@ dfP = dfO.merge(dfS, how='left', on='FAMIGLIA', suffixes=('', '-I'))
 
 for col in listini:
     dfP[col] = np.ceil(dfP[col] * dfP['PREZZO-VENDITA'] * 100) / 100
+
+# righe che restano senza prezzo finale perché in sconti.xlsx manca ancora la percentuale per
+# quella famiglia (viene aggiunta vuota in automatico da 2ImportIMIO.py, va compilata a mano)
+famiglie_senza_sconto = sorted(dfP.loc[dfP['ama'].isna(), 'FAMIGLIA'].dropna().unique().tolist())
+if famiglie_senza_sconto:
+    print(Fore.RED + f"Prezzo finale mancante per {len(famiglie_senza_sconto)} famiglie "
+                      f"(sconto da compilare in {sconti_f}): {', '.join(famiglie_senza_sconto)}")
+else:
+    print(Fore.GREEN + "Prezzo finale mancante: 0")
 
 #stampa excell con tabella prezzi listini completa
 dfP.to_excel(r"output/DFP.xlsx", index=False, sheet_name='Articoli_listino_vendita')

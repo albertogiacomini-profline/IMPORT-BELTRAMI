@@ -1,0 +1,10 @@
+/venv/
+
+__pycache__/
+*.pyc
+.DS_Store
+
+# snapshot rigenerabili in qualunque momento da genera_esportazione_articoli.py: non ha senso
+# versionarli, si accumulerebbero (uno ogni volta che lo snapshot è più vecchio di ORE_VALIDITA)
+input/esportazione_articoli/
+db_config.py

@@ -1,11 +1,34 @@
+import os
 import pandas as pd
+from colorama import Fore, init
+
+init(autoreset=True)
+
 # percorcorsi file
 TCP_f = "input/LISTINO GRANDI CLIENTI.xlsx"
 ban_f = "input/ban.xlsx"
 cor_brand = "input/cor-brand.xlsx"
 
+if not os.path.exists(TCP_f):
+    raise FileNotFoundError(f"Non trovo '{TCP_f}' (listino fornitore).")
+if not os.path.exists(ban_f):
+    raise FileNotFoundError(f"Non trovo '{ban_f}' (banlist marche).")
+
 #importa file
 df = pd.read_excel(TCP_f)
+
+# Verifica che le colonne attese dal resto dello script siano presenti: se Beltrami cambia il
+# template del listino, meglio fermarsi qui con un elenco chiaro piuttosto che un KeyError
+# poco leggibile più avanti
+colonne_attese = ['BRAND', 'BELTRAMI CODE', 'MANUFACTURER CODE', 'EAN CODE', 'DESCRIPTION',
+                   'DESCRIPTION IN ENGLISH', 'LISTINO GRANDI CLIENTI',
+                   'LISTINO NEGOZIO (IVA ESCL.)', 'MSRP']
+colonne_mancanti = [c for c in colonne_attese if c not in df.columns]
+if colonne_mancanti:
+    raise ValueError(
+        f"Nel listino '{TCP_f}' mancano le colonne attese: {colonne_mancanti}. "
+        f"Colonne trovate: {df.columns.tolist()}"
+    )
 
 # Rinominare le colonne
 df.rename(columns={'BRAND': 'BRAND','BELTRAMI CODE': 'B-CODICE',
@@ -72,6 +95,13 @@ df.columns = [c.replace("\n", "_") for c in df.columns]
 df['PUBBLICO'] = pd.to_numeric(df['PUBBLICO'], errors='coerce')
 df['PREZZO VENDITA'] = pd.to_numeric(df['PREZZO VENDITA'], errors='coerce')
 df['PREZZO ACQUISTO'] = pd.to_numeric(df['PREZZO ACQUISTO'], errors='coerce')
+
+# to_numeric con errors='coerce' trasforma i valori non convertibili in NaN senza avvisare:
+# segnaliamo quante righe sono finite così, per accorgerci di un valore scritto in modo strano
+for colonna in ['PUBBLICO', 'PREZZO VENDITA', 'PREZZO ACQUISTO']:
+    num_non_convertiti = df[colonna].isna().sum()
+    if num_non_convertiti:
+        print(Fore.RED + f"{colonna}: {num_non_convertiti} valori non numerici (impostati a vuoto)")
 
 # export
 df.to_excel("file/file_intermedi/clean.xlsx", index=False)
