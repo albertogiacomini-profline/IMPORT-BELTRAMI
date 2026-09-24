@@ -1,8 +1,29 @@
+import os
 import pandas as pd
+from colorama import Fore, init
+import genera_esportazione_articoli as genex
+
+init(autoreset=True)
 
 # import foglio uno
-imio_f = "input/Esportazione_Articoli - Vista Grid.xlsx"
 cp_f = "file/file_intermedi/clean.xlsx"
+
+if not os.path.exists(cp_f):
+    raise FileNotFoundError(
+        f"Non trovo '{cp_f}': lancia prima 1ImportF.py (genera il file pulito dal listino fornitore)."
+    )
+
+# anagrafica articoli: usa l'ultimo snapshot generato da GestCont (o il vecchio export manuale
+# se non ne esiste ancora uno). Il controllo "è abbastanza fresco?" e l'eventuale rigenerazione
+# li fa main.py prima di arrivare qui — questo script si limita a leggere quello che trova.
+# NB: la query di questo progetto include anche "Fine-utilizzo" (UtilFineDt), usata sotto per
+# lo split attivi/disattivati — vedi ATTIVI_DISATTIVATI.md.
+imio_f = genex.file_anagrafica_disponibile()
+if imio_f is None:
+    raise FileNotFoundError(
+        "Nessuna anagrafica articoli disponibile: lancia genera_esportazione_articoli.py "
+        "(o main.py, che lo fa in automatico) prima di continuare."
+    )
 
 
 def normalize_text_col(series: pd.Series) -> pd.Series:
@@ -25,9 +46,44 @@ dfI.columns = [c.replace(" ", "-") for c in dfI.columns]
 # Elimino colonne completamente vuote
 dfI.dropna(axis="columns", how="all", inplace=True)
 
+# Colonne indispensabili più avanti nello script: se mancano (es. l'export del gestionale ha
+# cambiato un nome colonna, o si è tornati al file legacy senza Fine-utilizzo) meglio fermarsi
+# qui con un elenco chiaro
+colonne_richieste = ['Codice', 'Codice-produttore', 'Fine-utilizzo', 'Descrizione', 'UM',
+                      'Codice-merceologico', 'Famiglia']
+colonne_mancanti = [c for c in colonne_richieste if c not in dfI.columns]
+if colonne_mancanti:
+    raise ValueError(
+        f"Nell'anagrafica articoli '{imio_f}' mancano le colonne richieste: {colonne_mancanti}. "
+        f"Colonne trovate: {dfI.columns.tolist()}"
+    )
+
 # Normalizzo il codice produttore in entrambi i dataset
 dfC["CODICE PRODUTTORE"] = normalize_text_col(dfC["CODICE PRODUTTORE"])
 dfI["Codice-produttore"] = normalize_text_col(dfI["Codice-produttore"])
+
+# Rinomino colonne clean per allineare merge e output (anticipato qui,
+# serve gia' sotto per il rilevamento degli ambigui)
+dfC = dfC.rename(
+    columns={
+        "CODICE PRODUTTORE": "Codice-produttore",
+        "EAN": "Codice-a-barre",
+        "DESCRIZIONE": "Descrizione",
+        "PREZZO GRANDI CLIENTI (IVA ESCL.)": "PREZZO-ACQUISTO",
+        "PREZZO NEGOZIO (IVA ESCL.)": "PREZZO-VENDITA",
+        "MSRP": "PUBBLICO",
+    }
+)
+
+# Mantengo SOLO gli articoli gestiti da questa pipeline Beltrami: in
+# anagrafica lo stesso "Codice-produttore" puo' comparire su piu'
+# articoli con prefissi diversi di "Codice" (es. "CB-21573" e
+# "CL-21573": stesso EAN/descrizione ma gestito da un altro canale/
+# fornitore). Solo i prefissi CB-/CM-/CK- sono di competenza di questa
+# pipeline, quindi vanno filtrati QUI, prima dello split
+# attivi/disattivati, di drop_duplicates e del merge.
+PREFISSI_PIPELINE = ("CB-", "CM-", "CK-")
+dfI = dfI[dfI["Codice"].astype("string").str.strip().str.startswith(PREFISSI_PIPELINE, na=False)].copy()
 
 # Separo export articoli in ATTIVI vs DISATTIVATI
 # Attivo = Fine-utilizzo vuota
@@ -43,21 +99,26 @@ if "Codice" in dfI_active.columns:
 if "Codice" in dfI_inactive.columns:
     dfI_inactive = dfI_inactive[~dfI_inactive["Codice"].astype("string").str.lower().eq("z")]
 
+# --- AMBIGUI ---
+# Anche tra i soli prefissi CB-/CM-/CK-, un Codice-produttore del
+# listino in lavorazione puo' avere piu' di un candidato in anagrafica
+# (es. due categorie Beltrami diverse con lo stesso codice produttore).
+# Il drop_duplicates(keep="first") qui sotto ne terrebbe silenziosamente
+# solo uno: esporto tutte le righe ambigue per revisione manuale, PRIMA
+# della dedup, scope limitato ai codici presenti in questo listino.
+codici_ambigui = dfI_active["Codice-produttore"][
+    dfI_active["Codice-produttore"].duplicated(keep=False)
+]
+candidati_ambigui = dfI_active[dfI_active["Codice-produttore"].isin(codici_ambigui)]
+dfAmbigui = dfC.merge(candidati_ambigui, how="inner", on="Codice-produttore", suffixes=("", "-I"))
+# stessa pulizia nomi colonna applicata a dfM piu' sotto, necessaria per
+# essere processato allo stesso modo da "3ordina e aggiungi colonne.py"
+dfAmbigui.columns = [c.replace("\n", "_") for c in dfAmbigui.columns]
+dfAmbigui.columns = [c.replace(" ", "-") for c in dfAmbigui.columns]
+
 # Mantengo una sola riga per codice produttore (prima occorrenza)
 dfI_active = dfI_active.drop_duplicates(subset="Codice-produttore", keep="first", ignore_index=True)
 dfI_inactive = dfI_inactive.drop_duplicates(subset="Codice-produttore", keep="first", ignore_index=True)
-
-# Rinomino colonne clean per allineare merge e output
-dfC = dfC.rename(
-    columns={
-        "CODICE PRODUTTORE": "Codice-produttore",
-        "EAN": "Codice-a-barre",
-        "DESCRIZIONE": "Descrizione",
-        "PREZZO GRANDI CLIENTI (IVA ESCL.)": "PREZZO-ACQUISTO",
-        "PREZZO NEGOZIO (IVA ESCL.)": "PREZZO-VENDITA",
-        "MSRP": "PUBBLICO",
-    }
-)
 
 # Merge principale: match SOLO su articoli attivi usando Codice-produttore
 dfM = dfC.merge(dfI_active, how="left", on="Codice-produttore", suffixes=("", "-I"))
@@ -144,6 +205,9 @@ if not dfFN.empty:
     dfFN.drop_duplicates(subset="Codice", keep="first", inplace=True, ignore_index=True)
     dfFN.to_excel("file/file_intermedi/To_no_famiglia.xlsx", index=False)
 
+if not dfAmbigui.empty:
+    dfAmbigui.to_excel("file/file_intermedi/To_ambigui.xlsx", index=False)
+
 # Estrai i valori unici dalla colonna "FAMIGLIA"
 famiglia_unique = pd.Series(dtype="string")
 if "Famiglia" in dfM.columns:
@@ -162,3 +226,15 @@ if not valori_da_aggiungere.empty:
     dfS = pd.concat([dfS, nuove_righe], ignore_index=True)
     print(dfS)
     dfS.to_excel("input/sconti.xlsx", index=False)
+
+# contatori errori
+num_righen = dfFN.shape[0]
+print((Fore.GREEN if num_righen == 0 else Fore.RED) + f"Famiglia mancante: {num_righen}")
+
+num_righenm = df_to_add.shape[0]
+print((Fore.GREEN if num_righenm == 0 else Fore.RED) + f"Codice mancante: {num_righenm}")
+
+num_ambigui = dfAmbigui.shape[0]
+print((Fore.GREEN if num_ambigui == 0 else Fore.RED) + f"Codici ambigui (revisione manuale): {num_ambigui}")
+
+print(f"Anagrafica articoli usata: {imio_f}")
