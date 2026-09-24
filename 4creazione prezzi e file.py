@@ -29,15 +29,9 @@ dfP.to_excel(r"output/DFP.xlsx", index=False, sheet_name='Articoli_listino_vendi
 
 # Nuovo set di colonne richiesto
 new_columns = [
-    'skupadre', 'ean', 'sku', 'urlkey', 'categoria', 'descrizione breve',
-    'metatitle', 'metadescription', 'status', 'locale', 'componente', 'brand',
-    'specialita', 'velocita', 'grupposerie', 'movimento', 'materiale', 'tecnologia forcella',
-    'specifica tecnica', 'specifica tecnica 2', 'tipologia freno', 'larghezza mozzo',
-    'ingranaggi', 'colore', 'confezione', 'attacco', 'escursione', 'software',
-    'tipologia bloccaggio', 'diametro', 'diametro coperture', 'larghezza', 'lunghezza',
-    'moltiplica', 'altezza', 'peso', 'volume', 'famiglia', 'merceologico', 'um',
+    'skupadre', 'ean', 'sku', 'urlkey', 'descrizione breve', 'peso', 'volume', 'famiglia', 'merceologico', 'um',
     'codice_produttore', 'codice_barre_produttore', 'descrizione', 'gemini_export',
-    'stato_origine', 'LVP', 'AMA', 'AMB', 'AMC', 'OEMA', 'OEMB', 'OEMC'
+    'stato_origine', 'lvp', 'ama', 'amb', 'amc', 'oema', 'oemb', 'oemc'
 ]
 
 # Creazione di un nuovo DataFrame con le nuove colonne
@@ -55,19 +49,22 @@ column_mapping = {
     'BARCODE PRODUTTORE': 'codice_barre_produttore',
     'Volume': 'volume',
     'Peso-lordo': 'peso',
-    'PUBBLICO': 'LVP',
-    'amc': 'AMC',
-    'amb': 'AMB',
-    'ama': 'AMA',
-    'oemc': 'OEMC',
-    'oemb': 'OEMB',
-    'oema': 'OEMA'
+    'PUBBLICO': 'lvp',
+    'amc': 'amc',
+    'amb': 'amb',
+    'ama': 'ama',
+    'oemc': 'oemc',
+    'oemb': 'oemb',
+    'oema': 'oema'
 }
 
 # Copia dei dati dal DataFrame originale a quello nuovo
 for old_col, new_col in column_mapping.items():
     if old_col in dfP.columns:
-        dft2_new[new_col] = dfP[old_col]
+        if new_col == 'lvp':
+            dft2_new[new_col] = np.round(dfP[old_col] / iva, 2)
+        else:
+            dft2_new[new_col] = dfP[old_col]
 
 # Impostazione di default per le colonne rimanenti se necessario
 for col in new_columns:
